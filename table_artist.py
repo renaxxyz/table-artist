@@ -344,6 +344,125 @@ def rich_card(data: Dict, title: str = "") -> str:
 
 
 # ═══════════════════════════════════════════
+# ═══════════════════════════════════════════
+# MODE 4: VERTICAL CARD IMAGE (key: value per baris)
+# ═══════════════════════════════════════════
+
+def image_card(data: Dict, title: str = "", theme: str = "dark") -> str:
+    """Render dict as vertical card image (key: value per baris ke bawah)"""
+    if not HAS_PIL:
+        return rich_card(data, title)
+
+    themes = {
+        "dark": {
+            "bg": "#0f172a",
+            "text": "#e2e8f0",
+            "accent": "#22d3ee",
+            "key_color": "#38bdf8",
+            "value_color": "#e2e8f0",
+            "title_color": "#22d3ee",
+        }
+    }
+    colors = themes.get(theme, themes["dark"])
+
+    font_size = 18
+    title_size = 24
+    padding = 20
+    row_height = 32
+    line_spacing = 4
+
+    try:
+        font = _load_font(font_size)
+        font_bold = _load_font(font_size)
+        font_title = _load_font(title_size)
+    except:
+        font = ImageFont.load_default()
+        font_bold = font
+        font_title = font
+
+    # Build lines
+    lines = []
+    if title:
+        lines.append(("title", title))
+
+    for key, value in data.items():
+        lines.append(("row", str(key), str(value)))
+
+    # Calculate max widths
+    max_key_w = 0
+    max_val_w = 0
+    for item in lines:
+        if item[0] == "row":
+            bbox = font.getbbox(item[1])
+            kw = bbox[2] - bbox[0] if bbox else len(item[1]) * 10
+            max_key_w = max(max_key_w, kw)
+            bbox = font.getbbox(item[2])
+            vw = bbox[2] - bbox[0] if bbox else len(item[2]) * 10
+            max_val_w = max(max_val_w, vw)
+        elif item[0] == "title":
+            bbox = font_title.getbbox(item[1])
+            tw = bbox[2] - bbox[0] if bbox else len(item[1]) * 15
+            max_val_w = max(max_val_w, tw)
+
+    separator_w = 24  # gap between key and value
+    total_w = padding * 2 + max_key_w + separator_w + max_val_w + 60
+    # Ensure minimum width for Telegram native photo
+    total_w = max(int(total_w), 600)
+
+    title_h = 50 if title else 0
+    total_h = title_h + padding * 2 + len([l for l in lines if l[0] == "row"]) * (row_height + line_spacing)
+
+    img = Image.new("RGB", (int(total_w), int(total_h)), colors["bg"])
+    draw = ImageDraw.Draw(img)
+
+    y = padding
+
+    # Title
+    if title:
+        bbox = font_title.getbbox(title)
+        tw = bbox[2] - bbox[0] if bbox else len(title) * 15
+        tx = (total_w - tw) // 2
+        draw.text((tx, y), title, fill=colors["title_color"], font=font_title)
+        y += title_h
+
+    # Rows
+    for item in lines:
+        if item[0] != "row":
+            continue
+        key, val = item[1], item[2]
+
+        # Draw key
+        draw.text((padding, y), key, fill=colors["key_color"], font=font_bold)
+
+        # Draw separator
+        kx = padding + max_key_w + 8
+        draw.text((kx, y), ":", fill=colors["accent"], font=font)
+
+        # Draw value with color coding
+        vx = kx + separator_w
+        val_color = colors["value_color"]
+        if val.startswith("✅"):
+            val_color = "#22c55e"
+        elif val.startswith("❌"):
+            val_color = "#ef4444"
+        elif val.startswith("⚠️"):
+            val_color = "#eab308"
+        elif val.startswith("🔴"):
+            val_color = "#ef4444"
+        elif val.startswith("🟢"):
+            val_color = "#22c55e"
+
+        draw.text((vx, y), val, fill=val_color, font=font)
+
+        y += row_height + line_spacing
+
+    # Save
+    output_path = str(OUTPUT_DIR / f"card_{hash(str(data) + theme)}.png")
+    img.save(output_path)
+    return output_path
+
+
+# ═══════════════════════════════════════════
 # AUTO-DETECT BEST FORMAT
 # ═══════════════════════════════════════════
 
@@ -352,7 +471,7 @@ def auto_render(data, title: str = "", style: str = "dark"):
     if isinstance(data, list):
         return image_table(data, title, theme="dark") if HAS_PIL else unicode_table(data, title)
     elif isinstance(data, dict):
-        return image_table([data], title, theme="dark") if HAS_PIL else rich_card(data, title)
+        return image_card(data, title, theme="dark") if HAS_PIL else rich_card(data, title)
     return unicode_table([{"data": str(data)}], title)
 
 
